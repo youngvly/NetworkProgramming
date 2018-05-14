@@ -7,8 +7,7 @@ def writexml(msguser,msgtime,msgdata) :
 
 	tree = ET.parse('output.xml')
 	root = tree.getroot()
-	data = ET.SubElement(root,"data")
-	lastdata = len(root)-2
+	lastdata = len(root)-1
 	msgnum =  int(root[lastdata][0].text)
 	
 	newdata = ET.SubElement(root,"data")
