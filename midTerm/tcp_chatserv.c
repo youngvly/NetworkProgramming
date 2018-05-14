@@ -9,16 +9,17 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define MAXLINE511
+#define MAXLINE 511
 #define MAX_SOCK 1024
 
 char *EXIT_STRING = "exit";
-char *START_STRINg = "Connected to chat_server \n";
+char *START_STRING = "Connected to chat_server \n";
 
-int maxfd1;
+int maxfdp1;
 int num_chat=0;
 int clisock_list[MAX_SOCK];
 int listen_sock;
+
 
 void addClient(int s, struct sockaddr_in *newcliaddr);
 int getmax();
@@ -27,8 +28,22 @@ int tcp_listen(int host,int port, int backlog);
 void errquit(char *mesg) {perror(mesg); exit(1);}
 
 int main(int argc, char *argv[]) {
+	
+	//xml file parsing
+	doc = xmlParseFile (DOC_NAME);
+	if(doc ==NULL) {
+		fprintf(stderr,"Document not parsed Successfully.\n");
+		return 0;
+	}
+	cur = xmlDocGetRootElement(doc);
+	if(cur == NULL){
+		fprintf(stderr,"empty document\n");
+		xmlFreeDoc(doc);
+		return;
+	}
+
 	struct sockaddr_in cliaddr;
-char buf[MAXLINE+1];
+	char buf[MAXLINE+1];
 	int i,j,nbyte,accp_sock,addrlen = sizeof(struct sockaddr_in);
 	fd_set read_fds;
 	if(argc !=2) {
@@ -44,14 +59,14 @@ char buf[MAXLINE+1];
 			FD_SET(clisock_list[1],&read_fds);
 		maxfdp1 = getmax() +1;
 		puts("wait for client");
-		if(select(maxdp1, &read_fdx,NULL,NULL,NULL) <0) 
+		if(select(maxfdp1, &read_fds,NULL,NULL,NULL) <0) 
 			errquit("select fail");
 		if(FD_ISSET(listen_sock,&read_fds)) {
 			accp_sock = accept(listen_sock,(struct sockaddr*) &cliaddr,&addrlen);
 			if(accp_sock ==-1) errquit("accept fail");
 			addClient(accp_sock,&cliaddr);
 			send(accp_sock,START_STRING,strlen(START_STRING),0);
-			printf("%dnd cliend added.\n", num_char);
+			printf("%dnd client added.\n", num_chat);
 		}
 		
 		for(i=0; i<num_chat; i++) {
@@ -62,7 +77,7 @@ char buf[MAXLINE+1];
 					continue;
 				}
 				buf[nbyte]=0;
-				if(strstr(buf,EXIT_string)!=NULL) {
+				if(strstr(buf,EXIT_STRING)!=NULL) {
 					removeClient(i);
 					continue;
 				}
@@ -75,7 +90,7 @@ char buf[MAXLINE+1];
 	return 0;
 }
 
-void addClient(int s, struct sockaddr_in *newCliaddr) {
+void addClient(int s, struct sockaddr_in *newcliaddr) {
 	char buf[20];
 	inet_ntop(AF_INET,&newcliaddr->sin_addr,buf,sizeof(buf));
 	printf("new client : %s\n",buf);
