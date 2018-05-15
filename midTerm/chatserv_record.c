@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <time.h>
 #include <python2.7/Python.h>
 
 #define MAXLINE 511
@@ -15,13 +16,19 @@
 
 char *EXIT_STRING = "exit";
 char *START_STRING = "Connected to chat_server \n";
+char *SHOW_USER = "show user";
+char *SHOW_CHAT = "show chat";
+
 
 int maxfdp1;
 int num_chat=0;
 int clisock_list[MAX_SOCK];
+time_t clitime_list[MAX_SOCK];
+char* cli_IP[MAX_SOCK];
+char *cliname_list[MAX_SOCK];
 int listen_sock;
 
-
+void showClient();
 void addClient(int s, struct sockaddr_in *newcliaddr);
 int getmax();
 void removeClient(int s);
@@ -36,7 +43,7 @@ int main(int argc, char *argv[]) {
 	PyRun_SimpleString("sys.path.append('/home/young/Desktop/network_Programming/NetworkProgramming/midTerm')");	//file directory
 	
 	struct sockaddr_in cliaddr;
-	char buf[MAXLINE+1];
+	char buf[MAXLINE+1],*bufmsg;
 	int i,j,nbyte,accp_sock,addrlen = sizeof(struct sockaddr_in);
 	fd_set read_fds;
 	if(argc !=2) {
@@ -45,6 +52,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	listen_sock=tcp_listen(INADDR_ANY, atoi(argv[1]),5);
+
 	while(1) {
 		FD_ZERO(&read_fds);
 		FD_SET(listen_sock,&read_fds);
@@ -52,6 +60,8 @@ int main(int argc, char *argv[]) {
 			FD_SET(clisock_list[1],&read_fds);
 		maxfdp1 = getmax() +1;
 		puts("wait for client");
+
+	//connect and add	
 		if(select(maxfdp1, &read_fds,NULL,NULL,NULL) <0) 
 			errquit("select fail");
 		if(FD_ISSET(listen_sock,&read_fds)) {
@@ -70,6 +80,7 @@ int main(int argc, char *argv[]) {
 					continue;
 				}
 				buf[nbyte]=0;
+				//client exit
 				if(strstr(buf,EXIT_STRING)!=NULL) {
 					removeClient(i);
 					continue;
@@ -79,16 +90,61 @@ int main(int argc, char *argv[]) {
 				printf("%s\n",buf);
 			}
 		}
+	//additional option (exit, show user, show chat)
+/*
+		if (fgets(bufmsg,MAXLINE,stdin)){
+			printf("fgets work");
+			if(strstr(bufmsg,EXIT_STRING)!=NULL){
+				puts("GoodBye");
+				close(listen_sock);
+				exit(0);
+			}
+			if(strstr(bufmsg,SHOW_USER)!=NULL){
+				//show user menu	
+
+			}	
+			else if(strstr(bufmsg,SHOW_CHAT)!=NULL){
+				//show chatting record
+				PyRun_SimpleString("import readxml");
+				PyRun_SimpleString("print readxml.readxml()");
+			}
+		}*/
 	}
+	Py_Finalize();
 	return 0;
+}
+void showClient() {
+	//총 접속자수, 접속시간, IP
+	//clisock_list[] ,num_chat
+	for(int i=0; i<num_chat; i++){
+	//	printf("%20s|%26s|%14d"
+	//		,cliname_list[i],ctime(&clitime_list[i]),cli_IP[i]);
+
+	} 
 }
 
 void addClient(int s, struct sockaddr_in *newcliaddr) {
 	char buf[20];
 	inet_ntop(AF_INET,&newcliaddr->sin_addr,buf,sizeof(buf));
 	printf("new client : %s\n",buf);
-	clisock_list[num_chat] = s;
+
+	//save client info
+	clisock_list[num_chat] = s;	//sock num
+	time(&clitime_list[num_chat]); 	//enter time
+
+	//stop here??!?!?!
+	struct in_addr new_addr;
+	new_addr=newcliaddr->sin_addr;
+	char str[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET,&new_addr,str,INET_ADDRSTRLEN);
+	printf("%s",str);
+//	cli_IP[num_chat] = newcliaddr->sin_addr.s_addr;
+//	cli_IP[num_chat]= newcliaddr->sin_addr;	//cli IP
+	printf("%d",newcliaddr->sin_addr.s_addr);
+	recv(clisock_list[num_chat],buf,MAXLINE,0);
+	sprintf(cliname_list[num_chat],"%s",buf);	//cli name
 	num_chat++;
+	puts("addClient() end");
 }
 
 void removeClient(int s) {

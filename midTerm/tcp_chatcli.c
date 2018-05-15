@@ -13,12 +13,12 @@
 #define NAME_LEN 20
 
 char *EXIT_STRING="exit";
-int tcp_connect (int af,char *servip,unsigned short port);
+int tcp_connect (int af,char *servip,unsigned short port,char* name);
 void errquit(char*mesg) {perror(mesg); exit(1);}
 
 int main(int argc, char *argv[]) {
 	char bufall[MAXLINE+NAME_LEN],*bufmsg;
-	 int maxfdp1,s,namelen;
+	int maxfdp1,s,namelen;
 	fd_set read_fds;
 	if(argc !=4) {
 		printf("Usage : %s server_ip port name\n",argv[0]);
@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
 	sprintf(bufall,"[%s] :",argv[3]);
 	namelen = strlen(bufall);
 	bufmsg = bufall+namelen;
-	s = tcp_connect(AF_INET,argv[1],atoi(argv[2]));
+	s = tcp_connect(AF_INET,argv[1],atoi(argv[2]),argv[3]);
 	if(s == -1) errquit("tcp_connect fail");
 	puts("server Connected");
 	maxfdp1 = s+1;
@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
 	}
 }
 
-int tcp_connect(int af,char*servip,unsigned short port) {
+int tcp_connect(int af,char*servip,unsigned short port,char*name) {
 	struct sockaddr_in servaddr;
 	int s;
 	if((s = socket(af,SOCK_STREAM,0)) <0) 
@@ -70,8 +70,9 @@ int tcp_connect(int af,char*servip,unsigned short port) {
 	inet_pton(AF_INET,servip,&servaddr.sin_addr);
 	servaddr.sin_port = htons(port);
 	
-	if(connect(s,(struct sockaddr*)&servaddr, sizeof(servaddr))<0)
+	if(connect(s,(struct sockaddr*)&servaddr, sizeof(servaddr))<0){
+		send(s,name,strlen(name),0);
 		return -1;
+	}
 	return s;
 }
-	
