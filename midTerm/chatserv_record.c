@@ -24,7 +24,7 @@ int maxfdp1;
 int num_chat=0;
 int clisock_list[MAX_SOCK];
 time_t clitime_list[MAX_SOCK];
-char* cli_IP[MAX_SOCK];
+char *cli_IP[MAX_SOCK];
 char *cliname_list[MAX_SOCK];
 int listen_sock;
 
@@ -91,16 +91,16 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	//additional option (exit, show user, show chat)
-/*
+
 		if (fgets(bufmsg,MAXLINE,stdin)){
-			printf("fgets work");
 			if(strstr(bufmsg,EXIT_STRING)!=NULL){
 				puts("GoodBye");
 				close(listen_sock);
 				exit(0);
 			}
-			if(strstr(bufmsg,SHOW_USER)!=NULL){
+			else if(strstr(bufmsg,SHOW_USER)!=NULL){
 				//show user menu	
+				showClient(); 
 
 			}	
 			else if(strstr(bufmsg,SHOW_CHAT)!=NULL){
@@ -108,7 +108,8 @@ int main(int argc, char *argv[]) {
 				PyRun_SimpleString("import readxml");
 				PyRun_SimpleString("print readxml.readxml()");
 			}
-		}*/
+			bufmsg[0] = '\0';
+		}
 	}
 	Py_Finalize();
 	return 0;
@@ -116,15 +117,23 @@ int main(int argc, char *argv[]) {
 void showClient() {
 	//총 접속자수, 접속시간, IP
 	//clisock_list[] ,num_chat
+	printf("------------------------------User------------------------------\n");
+	printf("          <<<Total Chatting User : %d>>>\n",num_chat);
+	printf("%-20s|%-20s|%-26s","User Name","IP","Enter Time");
+	if(num_chat == 0 ) {
+		printf("%-66s","no one");
+		return ;
+	}
 	for(int i=0; i<num_chat; i++){
-	//	printf("%20s|%26s|%14d"
-	//		,cliname_list[i],ctime(&clitime_list[i]),cli_IP[i]);
+		printf("%-20s|%-20s|%-26s"
+			,cliname_list[i],cli_IP[i],ctime(&clitime_list[i]));
 
 	} 
 }
 
 void addClient(int s, struct sockaddr_in *newcliaddr) {
 	char buf[20];
+	char namebuf[20];
 	inet_ntop(AF_INET,&newcliaddr->sin_addr,buf,sizeof(buf));
 	printf("new client : %s\n",buf);
 
@@ -133,21 +142,19 @@ void addClient(int s, struct sockaddr_in *newcliaddr) {
 	time(&clitime_list[num_chat]); 	//enter time
 
 	//stop here??!?!?!
-	struct in_addr new_addr;
-	new_addr=newcliaddr->sin_addr;
-	char str[INET_ADDRSTRLEN];
-	inet_ntop(AF_INET,&new_addr,str,INET_ADDRSTRLEN);
-	printf("%s",str);
-//	cli_IP[num_chat] = newcliaddr->sin_addr.s_addr;
-//	cli_IP[num_chat]= newcliaddr->sin_addr;	//cli IP
-	printf("%d",newcliaddr->sin_addr.s_addr);
-	recv(clisock_list[num_chat],buf,MAXLINE,0);
-	sprintf(cliname_list[num_chat],"%s",buf);	//cli name
+	cli_IP[num_chat] = (char*)malloc(sizeof((char*)buf));
+	cliname_list[num_chat]=(char*)malloc(sizeof((char*)buf));
+	strcpy(cli_IP[num_chat],buf);
+//	sprintf(cli_IP[num_chat],"%s",buf); ;	//cli IP
+	recv(clisock_list[num_chat],namebuf,MAXLINE,0);
+	strcpy(cliname_list[num_chat],namebuf);
+//	sprintf(cliname_list[num_chat],"%s",buf);	//cli name
 	num_chat++;
 	puts("addClient() end");
 }
 
 void removeClient(int s) {
+	free(cli_IP[num_chat]);
 	close(clisock_list[s]);
 	if(s!=num_chat-1)
 		clisock_list[s] = clisock_list[num_chat-1];
