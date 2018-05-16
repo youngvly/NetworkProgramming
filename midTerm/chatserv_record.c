@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
 	puts("<< Menu Guide : exit | show user | show chat >>");
 
 	while(1) {
-		FD_ZERO(&read_fds);	//서버관리자의 입력도 받기위해, 이걸 두면 segmentation error발생.
+		FD_ZERO(&read_fds);
 		FD_SET(0,&read_fds);
 		FD_SET(listen_sock,&read_fds);
 		for(i=0; i<num_chat; i++) 
@@ -105,33 +105,34 @@ int main(int argc, char *argv[]) {
 					removeClient(i);
 					continue;
 				}
-//save message 
-				time(&msgtime);	//message record 에 담길 메시지발신시간
-				//xml record파일에(output.xml) message 저장
-				//c의 변수를 python변수로 바꿈
-				name = PyString_FromString(cliname_list[i]);
-				ptime = PyString_FromString(ctime(&msgtime));
-				msg = PyString_FromString(buf);
-				//python의 함수를 불러옴
-				funcname = PyString_FromString("writexml");
-				pmodule = PyImport_Import(funcname);
-				pdic = PyModule_GetDict(pmodule);
-				pfunc= PyDict_GetItem(pdic,funcname);
-				//매개변수 3개 설정 def writexml(msguser,msgtime,msgdata)
-				pargs = PyTuple_New(3);
-				PyTuple_SetItem(pargs,0,name);
-				PyTuple_SetItem(pargs,1,ptime);
-				PyTuple_SetItem(pargs,2,msg);
-				PyObject_CallObject(pfunc,pargs);
-			
-				//BroadCast
-				for(j=0; j<num_chat; j++)
-					send(clisock_list[j],buf,nbyte,0);
-printf("%s\n",buf);
+		//save message 
+			time(&msgtime);	//message record 에 담길 메시지발신시간
+			//xml record파일에(output.xml) message 저장
+			//c의 변수를 python변수로 바꿈
+			name = PyString_FromString(cliname_list[i]);
+			ptime = PyString_FromString(ctime(&msgtime));
+			msg = PyString_FromString(buf);
+			//python의 함수를 불러오기 위해 import
+			funcname = PyString_FromString("writexml");
+			pmodule = PyImport_Import(funcname);
+			pdic = PyModule_GetDict(pmodule);
+			pfunc= PyDict_GetItem(pdic,funcname);
+			//매개변수 3개 설정 def writexml(msguser,msgtime,msgdata)
+			pargs = PyTuple_New(3);
+			PyTuple_SetItem(pargs,0,name);
+			PyTuple_SetItem(pargs,1,ptime);
+			PyTuple_SetItem(pargs,2,msg);
+			//writexml(...) call
+			PyObject_CallObject(pfunc,pargs);
+		
+		//BroadCast
+			for(j=0; j<num_chat; j++)
+				send(clisock_list[j],buf,nbyte,0);
+			printf("%s\n",buf);
 			}
 		}
 
-/******additional option (exit, show user, show chat)***********/
+	/******additional option (exit, show user, show chat)***********/
 	if(FD_ISSET(0,&read_fds)){				//내 키보드 변경 감지
 		if (fgets(bufmsg,MAXLINE,stdin)){
 			if(strstr(bufmsg,EXIT_STRING)!=NULL){	//server entered exit
@@ -140,18 +141,16 @@ printf("%s\n",buf);
 				exit(0);
 			}
 			//-------SHOW USER MENU
-			else if(strstr(bufmsg,SHOW_USER)!=NULL){
-				//show user menu	
+			else if(strstr(bufmsg,SHOW_USER)!=NULL){	
 				showClient(); 
 
 			}	
 			//---------SHOW CHATTING MENU
 			else if(strstr(bufmsg,SHOW_CHAT)!=NULL){
-				//show chatting record
 				//call python file (readxml.py)
 				PyRun_SimpleString("import readxml");
 				PyRun_SimpleString("readxml.readxml()");
-			}
+			}//--------wrong input > show guide
 			else{
 				puts("<< Menu Guide : exit | show user | show chat >>");
 			}
@@ -170,16 +169,16 @@ void showClient() {
 	printf(" %-20s|%-20s|%-26s\n","User Name","IP","Enter Time");
 	for(int i=0; i<80; i++) printf("-");
 	printf("\n ");
-	if(num_chat == 0 ) {
+	if(num_chat == 0 ) {			//user가 아무도 없으면 noone 이라고 프린트,
 		printf("%-66s","no one");
 		return ;
 	}
-	for(int i=0; i<num_chat; i++){
+	for(int i=0; i<num_chat; i++){		//client 순서번호,이름,IP,접속시간
 		printf("%-3d|%-20s|%-20s|%-26s"
 			,i+1,cliname_list[i],cli_IP[i],ctime(&clitime_list[i]));
 
 	} 
-	printf("		Total Chatting User : %d\n",num_chat);
+	printf("		Total Chatting User : %d\n",num_chat);	//전체참가자수
 	for(int i=0; i<79; i++) printf("-");
 	printf("\n");
 }

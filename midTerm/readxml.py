@@ -35,4 +35,3 @@ def readxml() :
 		time = i.getElementsByTagName('time')[0].childNodes[0].data[:-1] + '\0'
 		print('{:26}'.format(time))	
 	print('{:-<80}'.format('-'))
-readxml()
