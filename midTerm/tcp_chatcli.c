@@ -1,3 +1,4 @@
+/**********tcp_chatcli.c************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,7 @@ int main(int argc, char *argv[]) {
 	s = tcp_connect(AF_INET,argv[1],atoi(argv[2]),argv[3]);
 	if(s == -1) errquit("tcp_connect fail");
 	puts("server Connected");
+	send(s,argv[3],strlen(argv[3]),0);	//send user name
 	maxfdp1 = s+1;
 	FD_ZERO(&read_fds);
 	
@@ -45,7 +47,7 @@ int main(int argc, char *argv[]) {
 				printf("%s \n",bufmsg);
 			}
 		}
-		if(FD_ISSET(s,&read_fds)) {
+		if(FD_ISSET(0,&read_fds)) {
 			if(fgets(bufmsg,MAXLINE, stdin)) {
 				if(send(s,bufall,namelen+strlen(bufmsg),0)<0)
 					puts("Error : Write error on socket.");
@@ -71,7 +73,6 @@ int tcp_connect(int af,char*servip,unsigned short port,char*name) {
 	servaddr.sin_port = htons(port);
 	
 	if(connect(s,(struct sockaddr*)&servaddr, sizeof(servaddr))<0){
-		send(s,name,strlen(name),0);
 		return -1;
 	}
 	return s;

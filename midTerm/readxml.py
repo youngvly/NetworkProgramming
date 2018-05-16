@@ -20,4 +20,4 @@ def readxml() :
 		print(i.getElementsByTagName('username')[0].childNodes[0].data),
 		print(i.getElementsByTagName('message')[0].childNodes[0].data),
 		print(i.getElementsByTagName('time')[0].childNodes[0].data)	
-readxml()	
+	
