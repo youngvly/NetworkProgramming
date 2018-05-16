@@ -1,10 +1,17 @@
+/**python compile 
+g++ testpython.c -o outputfile 
+-I/usr/include/python2.7 -pthread -lm -lutil /usr/lib/python2.7/config-x86_64-linux-gnu/libpython2.7.so
+
+**/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/file.h>
-#include <strings.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -60,15 +67,15 @@ int main(int argc, char *argv[]) {
 		exit(0);
 	}
 	
-	listen_sock=tcp_listen(INADDR_ANY, atoi(argv[1]),5);
+	listen_sock = tcp_listen(INADDR_ANY,atoi(argv[1]),5);
 	puts("<< Menu Guide : exit | show user | show chat >>");
 
 	while(1) {
-		//FD_ZERO(&read_fds);	//서버관리자의 입력도 받기위해, 이걸 두면 segmentation error발생.
+		FD_ZERO(&read_fds);	//서버관리자의 입력도 받기위해, 이걸 두면 segmentation error발생.
 		FD_SET(0,&read_fds);
 		FD_SET(listen_sock,&read_fds);
 		for(i=0; i<num_chat; i++) 
-			FD_SET(clisock_list[1],&read_fds);
+			FD_SET(clisock_list[i],&read_fds);
 		maxfdp1 = getmax() +1;
 		puts("wait for client");
 
@@ -98,7 +105,7 @@ int main(int argc, char *argv[]) {
 					removeClient(i);
 					continue;
 				}
-			//save message 
+//save message 
 				time(&msgtime);	//message record 에 담길 메시지발신시간
 				//xml record파일에(output.xml) message 저장
 				//c의 변수를 python변수로 바꿈
@@ -116,16 +123,11 @@ int main(int argc, char *argv[]) {
 				PyTuple_SetItem(pargs,1,ptime);
 				PyTuple_SetItem(pargs,2,msg);
 				PyObject_CallObject(pfunc,pargs);
-				//파이선 매개변수 반환
-				Py_DECREF(pdic);
-				Py_DECREF(name);
-				Py_DECREF(ptime);
-				Py_DECREF(msg);
-				Py_DECREF(pargs);
+			
 				//BroadCast
 				for(j=0; j<num_chat; j++)
 					send(clisock_list[j],buf,nbyte,0);
-				printf("%s\n",buf);
+printf("%s\n",buf);
 			}
 		}
 
