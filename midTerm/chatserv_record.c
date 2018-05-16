@@ -61,6 +61,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	listen_sock=tcp_listen(INADDR_ANY, atoi(argv[1]),5);
+	puts("<< Menu Guide : exit | show user | show chat >>");
 
 	while(1) {
 		//FD_ZERO(&read_fds);	//서버관리자의 입력도 받기위해, 이걸 두면 segmentation error발생.
@@ -147,7 +148,10 @@ int main(int argc, char *argv[]) {
 				//show chatting record
 				//call python file (readxml.py)
 				PyRun_SimpleString("import readxml");
-				PyRun_SimpleString("print readxml.readxml()");
+				PyRun_SimpleString("readxml.readxml()");
+			}
+			else{
+				puts("<< Menu Guide : exit | show user | show chat >>");
 			}
 			bufmsg[0] = '\0';
 		}
@@ -160,18 +164,22 @@ int main(int argc, char *argv[]) {
 void showClient() {
 	//총 접속자수, 접속시간, IP
 	//clisock_list[] ,num_chat
-	printf(" ------------------------------User------------------------------\n");
-	printf("           <<<Total Chatting User : %d>>>\n",num_chat);
+	printf("\n		<<<SHOW ALL USER INFO>>>\n");
 	printf(" %-20s|%-20s|%-26s\n","User Name","IP","Enter Time");
+	for(int i=0; i<80; i++) printf("-");
+	printf("\n ");
 	if(num_chat == 0 ) {
 		printf("%-66s","no one");
 		return ;
 	}
 	for(int i=0; i<num_chat; i++){
-		printf("%-20s|%-20s|%-26s"
-			,cliname_list[i],cli_IP[i],ctime(&clitime_list[i]));
+		printf("%-3d|%-20s|%-20s|%-26s"
+			,i+1,cliname_list[i],cli_IP[i],ctime(&clitime_list[i]));
 
 	} 
+	printf("		Total Chatting User : %d\n",num_chat);
+	for(int i=0; i<79; i++) printf("-");
+	printf("\n");
 }
 
 void addClient(int s, struct sockaddr_in *newcliaddr) {
@@ -192,7 +200,6 @@ void addClient(int s, struct sockaddr_in *newcliaddr) {
 	strcpy(cliname_list[num_chat],namebuf);
 	
 	num_chat++;
-	puts("addClient() end");
 }
 
 void removeClient(int s) {

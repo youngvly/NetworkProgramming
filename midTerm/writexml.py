@@ -8,14 +8,14 @@ def makeRecordFile() :
 	tree.write("output.xml")	
 
 def writexml(msguser,msgtime,msgdata) :
-	msgnum = 1
+	msgnum = 0
 
 	ET.register_namespace("","http://www.w3.org/2000/svg")
 
 	tree = ET.parse('output.xml')
 	root = tree.getroot()
 	lastdata = len(root)-1
-	if (msgnum !=1) : 
+	if (msgnum !=0) : 
 		msgnum =  int(root[lastdata][0].text)
 	
 	newdata = ET.SubElement(root,"data")
