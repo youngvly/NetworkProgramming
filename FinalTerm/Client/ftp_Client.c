@@ -91,9 +91,9 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
 		//data print
 		recv(datasock, buf, MAXLINE,0);
 		puts("\n-------------Server File List-----------");
-		puts(buf);
-		puts("----------------------------------------");
+		puts(buf);	
 	}
+	puts("----------------------------------------");
 	
    }
    //PUT Comment = Server's GET Function

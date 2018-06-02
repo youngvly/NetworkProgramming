@@ -6,10 +6,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <dirent.h> 
 
 #define MAXLINE 4096
 #define CLINUM 5
-#define GetCurrentDir getcwd
 
 char* EXIT_STRING = "exit";
 int doQuery(int accp_sock, int listen_sock,int mainport);
@@ -20,7 +20,7 @@ void errquit(char *mesg) {perror(mesg); exit(1);}
 
 int main(int argc, char *argv[]) {
 	struct sockaddr_in cliaddr, servaddr;
-	int listen_sock,accp_sock,addrlen=sizeof(cliaddr),maxfdp1;
+	int listen_sock,accp_sock,addrlen=sizeof(cliaddr);
 	pid_t pid;
 	fd_set read_fds;
 	char bufmsg[MAXLINE];
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 	puts("Client connected");
 	if((pid = fork())==0)	//자식프로세스에서 클라언트 쿼리관리
 		doQuery(accp_sock,listen_sock,atoi(argv[1]));
-	if(pid>0){		//부모프로세스에서 서버입력관리
+	else if(pid>0){		//부모프로세스에서 서버입력관리
 		if (fgets(bufmsg,MAXLINE,stdin)){
 			if(strstr(bufmsg,EXIT_STRING)!=NULL){	//server entered exit
 				puts("GoodBye");
@@ -66,9 +66,6 @@ int main(int argc, char *argv[]) {
 		}
 		bufmsg[0] = '\0';
 	 }
-	
-		
-	//else printf("not child\n");
 	
 	close(accp_sock);
 	}//end of while
@@ -136,27 +133,38 @@ int doQuery(int accp_sock,int listen_sock,int mainport){
 		printf("Client Exit\n");
 	   }
 	   //show list string (ls)
-	   else if (strstr(buf,"ls")!=NULL)  {
-		FILE *in;
-		char temp[MAXLINE],port[MAXLINE];
-		int datasock;
+	   else if (strcmp("ls\n",buf)==0)  {
+	    	int datasock;
 		data_port=data_port+1;
-		if(data_port==mainport){
+		char port[MAXLINE];
+		char *curr_dir = NULL; 
+		DIR *dp = NULL; 
+		struct dirent *dptr = NULL; 
+		if(data_port==mainport)		//포트번호 중복방지
 			data_port=data_port+1;
-		}
+		datasock=tcp_listen(data_port);		//creating socket for data connection
 		sprintf(port,"%d",data_port);
-		datasock=tcp_listen(data_port);			//creating socket for data connection
-		send(accp_sock, port,MAXLINE,0);				//sending data connection port no. to client
-		datasock=accept_conn(datasock);	 			//accepting connection from client
-		if(!(in = popen("ls", "r"))){
-			printf("ls file error\n");
-		}
-		while(fgets(temp, sizeof(temp), in)!=NULL){
+
+		send(accp_sock, port,MAXLINE,0);	//sending data connection port to client
+		datasock=accept_conn(datasock);			
+
+		// Get the value of environment variable PWD 
+		curr_dir = getenv("PWD"); 
+		if(NULL == curr_dir) 
+			errquit("ERROR : Could not get the working directory");
+
+		// Open the current directory 
+		dp = opendir((const char*)curr_dir); 
+		if(NULL == dp) 
+			errquit("ERROR : Could not open the working directory");
+
+		while(NULL != (dptr = readdir(dp))) 
+		{ 
+			printf("%s  ",dptr->d_name); 
 			send(datasock,"1",MAXLINE,0);
-			send(datasock, temp, MAXLINE, 0);
-		}
+			send(datasock, dptr->d_name, MAXLINE, 0);
+		} 
 		send(datasock,"0",MAXLINE,0);
-		pclose(in);
 	   }
 
 	   //put String ( put file to ftp) = getfunction in client
