@@ -20,6 +20,7 @@ int main(int argc, char **argv){
  int sock;
  struct sockaddr_in servaddr;
  char bufmsg[MAXLINE], recvline[MAXLINE];
+ fd_set read_fds;
 
  //basic check of the arguments
  //additional checks can be inserted
@@ -30,16 +31,31 @@ int main(int argc, char **argv){
  //tcp connect함수 호출
   sock = tcp_connect(AF_INET,argv[1],atoi(argv[2]));
   if(sock == -1) errquit("tcp_connect fail");
+  int maxfdp1 = sock+1;
   printf("server Connected\n");
 
-  while(1) {
-	printf("FTP QUERY >> ");	
-	if(fgets(bufmsg,MAXLINE, stdin)) {
-		send(sock, bufmsg, MAXLINE, 0);
-		sendQuery(bufmsg,sock,argv[1]);
+	FD_ZERO(&read_fds);	
+	while(1) {
+		printf("FTP QUERY >> ");	
+		FD_SET(0,&read_fds);
+		FD_SET(sock,&read_fds);
+		if(select(maxfdp1,&read_fds,NULL,NULL,NULL) <0) 
+			errquit("select fail");
+		/*if(FD_ISSET(s,&read_fds)) {	//서버와연결된 소켓에서 입력이 오면
+			int nbyte;
+			//메시지를 받고 출력
+			if((nbyte=recv(s,bufmsg,MAXLINE,0)) >0) {
+				bufmsg[nbyte] =0;
+				printf("%s \n",bufmsg);
+			}
+		}*/
+		if(FD_ISSET(0,&read_fds)) {	//사용자의 입력이 감지되면
+			if(fgets(bufmsg,MAXLINE, stdin)) {
+				send(sock, bufmsg, MAXLINE, 0);
+				sendQuery(bufmsg,sock,argv[1]);
+			}
+		}
 	}
-	
-  } 
 
  exit(0);
 }
@@ -66,7 +82,6 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
 	datasock=tcp_connect (AF_INET,servip,atoi(port));
 	puts("\n-------------Server File List-----------");	
 	while(1){ 			//to indicate that more blocks are coming		
-		
 		//data print
 		recv(datasock, buf, MAXLINE,0);
 		if(strcmp("0",buf)==0)			//end of data
@@ -74,7 +89,6 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
 		puts(buf);	
 	}
 	puts("----------------------------------------");
-	
    }
    //PUT Comment = Server's GET Function
    else if (strstr(token,"put")!=NULL)  {
@@ -159,7 +173,6 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
    }
    printf("FTP QUERY >> ");
 }
-
 
 int tcp_connect(int af,char*servip,unsigned short port) {
 	struct sockaddr_in servaddr;
