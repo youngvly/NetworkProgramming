@@ -4,25 +4,24 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <string.h>
-//#include <files.h>
 #include <unistd.h>
 #include <dirent.h> 
 
 #define MAXLINE 4096 /*max text line length*/
-#define LISTENQ 8 /*maximum number of client connections*/
+#define MAXCLI 5
 
 #define EXIT_STRING "exit"
-int create_socket(int);
+int tcp_listen(int);
 int accept_conn(int);
 void errquit(char *mesg) {perror(mesg); exit(1);}	
-
+void doQuery(int accp_sock,int listen_sock,char** argv);
 
 int main (int argc, char **argv)
 {
- int listenfd, connfd, n;
- pid_t childpid;
+ int listen_sock, accp_sock, n;
+ pid_t pid;
  socklen_t clilen;
- char buf[MAXLINE];
+ char buf[MAXLINE],bufmsg[MAXLINE];
  struct sockaddr_in cliaddr, servaddr;
 
  if (argc !=2) {						//validating the input
@@ -33,7 +32,7 @@ int main (int argc, char **argv)
 
  //Create a socket for the soclet
  //If sockfd<0 there was an error in the creation of the socket
- if ((listenfd = socket (AF_INET, SOCK_STREAM, 0)) <0) {
+ if ((listen_sock = socket (AF_INET, SOCK_STREAM, 0)) <0) {
 		perror("socket fail");
 		exit(1);
  }
@@ -45,29 +44,45 @@ int main (int argc, char **argv)
  servaddr.sin_port = htons(atoi(argv[1]));
 
  //bind the socket
- bind (listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+ bind (listen_sock, (struct sockaddr *) &servaddr, sizeof(servaddr));
 
  //listen to the socket by creating a connection queue, then wait for clients
- listen (listenfd, LISTENQ);
+ listen (listen_sock, MAXCLI);
 
 	puts("wait for client");
 
- for ( ; ; ) {
+while(1) {
 
   clilen = sizeof(cliaddr);
   //accept a connection
-  connfd = accept (listenfd, (struct sockaddr *) &cliaddr, &clilen);
+  accp_sock = accept (listen_sock, (struct sockaddr *) &cliaddr, &clilen);
 
 	puts("Client connected");;
+  if((pid = fork ()) >0) {
+	if (fgets(bufmsg,MAXLINE,stdin)){
+			if(strstr(bufmsg,EXIT_STRING)!=NULL){	//server entered exit
+				puts("GoodBye");
+				close(listen_sock);		//close listen socket 
+				exit(0);
+			}
+		}
+		bufmsg[0] = '\0';
+  }
 
-  if ( (childpid = fork ()) == 0 ) {//if it’s 0, it’s child process
+  if (pid  == 0 ) {//if it’s 0, it’s child process
+	doQuery(accp_sock,listen_sock,argv);
+  }
+}//end of while
+ close(accp_sock);
+}
 
+void doQuery(int accp_sock,int listen_sock,char** argv){
 	puts("Child process Created (for Client request)");
-
+ char buf[MAXLINE];
   //close listening socket
-  close (listenfd);
-  int data_port=1024;						//for data connection
-  while ( (n = recv(connfd, buf, MAXLINE,0)) > 0)  {
+  close (listen_sock);
+  int data_port=1024,n;						//for data connection
+  while ( (n = recv(accp_sock, buf, MAXLINE,0)) > 0)  {
 	   printf("String received : %s",buf);
 	   char *token,*dummy;
 	   dummy=buf;
@@ -86,66 +101,18 @@ int main (int argc, char **argv)
 			data_port=data_port+1;
 		}
 		sprintf(port,"%d",data_port);
-		datasock=create_socket(data_port);			//creating socket for data connection
-		send(connfd, port,MAXLINE,0);				//sending data connection port no. to client
+		datasock=tcp_listen(data_port);			//creating socket for data connection
+		send(accp_sock, port,MAXLINE,0);				//sending data connection port no. to client
 		datasock=accept_conn(datasock);	 			//accepting connection from client
 		if(!(in = popen("ls", "r"))){
 			perror("fileopen Error");
 		}
 		while(fgets(temp, sizeof(temp), in)!=NULL){
-			send(datasock,"1",MAXLINE,0);
+			//send(datasock,"1",MAXLINE,0);
 			send(datasock, temp, MAXLINE, 0);
-		
 		}
 		send(datasock,"0",MAXLINE,0);
 		pclose(in);
-
-		//cout<<"file closed\n";
-		/*int datasock;
-		data_port=data_port+1;
-		char temp[MAXLINE],port[MAXLINE];
-		data_port=data_port+1;
-		if(data_port==atoi(argv[1])){
-			data_port=data_port+1;
-		}
-		sprintf(port,"%d",data_port);
-		datasock=create_socket(data_port);			//creating socket for data connection
-		send(connfd, port,MAXLINE,0);				//sending data connection port no. to client
-		datasock=accept_conn(datasock);	 			//accepting connection from client
-
-		char *curr_dir = NULL; 
-		DIR *dp = NULL; 
-		struct dirent *dptr = NULL; 
-		unsigned int count = 0; 
-
-		// Get the value of environment variable PWD 
-		curr_dir = getenv("PWD"); 
-		if(NULL == curr_dir) 
-		{ 
-		printf("\n ERROR : Could not get the working directory\n"); 
-		return -1; 
-		} 
-
-		// Open the current directory 
-		dp = opendir((const char*)curr_dir); 
-		if(NULL == dp) 
-		{ 
-		printf("\n ERROR : Could not open the working directory\n"); 
-		return -1; 
-		} 
-
-		printf("\n"); 
-		// Go through and display all the names (files or folders) 
-		// Contained in the directory. 
-		for(count = 0; NULL != (dptr = readdir(dp)); count++) 
-		{ 
-			send(datasock,"1",MAXLINE,0);
-			sprintf(temp,"%s\n",dptr->d_name);
-			send(datasock, temp, MAXLINE, 0);
-		printf("%s  ",dptr->d_name); 
-		} 
-		send(datasock,"0",MAXLINE,0);
-		printf("\n %u", count); */
 	   }
 
 
@@ -160,23 +127,23 @@ int main (int argc, char **argv)
 			data_port=data_port+1;
 		}
 		sprintf(port,"%d",data_port);
-		datasock=create_socket(data_port);				//creating socket for data connection
-		send(connfd, port,MAXLINE,0);					//sending data connection port to client
-		datasock=accept_conn(datasock);					//accepting connection
-		recv(connfd,check,MAXLINE,0);
+		datasock=tcp_listen(data_port);		//creating socket for data connection
+		send(accp_sock, port,MAXLINE,0);	//sending data connection port to client
+		datasock=accept_conn(datasock);		//accepting connection
+		recv(accp_sock,check,MAXLINE,0);
 		if(strcmp("1",check)==0){
 			if((fp=fopen(token,"w"))==NULL)
 				printf("Create File Error\n");
 			else
 			{
-				recv(connfd, char_num_blks, MAXLINE,0);
+				recv(accp_sock, char_num_blks, MAXLINE,0);
 				num_blks=atoi(char_num_blks);
 				for(i= 0; i < num_blks; i++) { 
 					recv(datasock, buffer, MAXLINE,0);
 					fwrite(buffer,sizeof(char),MAXLINE,fp);
 					//cout<<buffer<<endl;
 				}
-				recv(connfd, char_num_last_blk, MAXLINE,0);
+				recv(accp_sock, char_num_last_blk, MAXLINE,0);
 				num_last_blk=atoi(char_num_last_blk);
 				if (num_last_blk > 0) { 
 					recv(datasock, buffer, MAXLINE,0);
@@ -200,20 +167,20 @@ int main (int argc, char **argv)
 			data_port=data_port+1;
 		}
 		sprintf(port,"%d",data_port);
-		datasock=create_socket(data_port);				//creating socket for data connection
-		send(connfd, port,MAXLINE,0);					//sending port no. to client
+		datasock=tcp_listen(data_port);				//creating socket for data connection
+		send(accp_sock, port,MAXLINE,0);					//sending port no. to client
 		datasock=accept_conn(datasock);					//accepting connnection by client
 		if ((fp=fopen(token,"r"))!=NULL)
 		{
 			//size of file
-			send(connfd,"1",MAXLINE,0);
+			send(accp_sock,"1",MAXLINE,0);
 			fseek (fp , 0 , SEEK_END);
 			lSize = ftell (fp);
 			rewind (fp);
 			num_blks = lSize/MAXLINE;
 			num_last_blk = lSize%MAXLINE; 
 			sprintf(char_num_blks,"%d",num_blks);
-			send(connfd, char_num_blks, MAXLINE, 0);
+			send(accp_sock, char_num_blks, MAXLINE, 0);
 			//cout<<num_blks<<"	"<<num_last_blk<<endl;
 
 			for(i= 0; i < num_blks; i++) { 
@@ -222,7 +189,7 @@ int main (int argc, char **argv)
 				//cout<<buffer<<"	"<<i<<endl;
 			}
 			sprintf(char_num_last_blk,"%d",num_last_blk);
-			send(connfd, char_num_last_blk, MAXLINE, 0);
+			send(accp_sock, char_num_last_blk, MAXLINE, 0);
 			if (num_last_blk > 0) { 
 				fread (buffer,sizeof(char),num_last_blk,fp);
 				send(datasock, buffer, MAXLINE, 0);
@@ -233,7 +200,7 @@ int main (int argc, char **argv)
 		
 		}
 		else{
-			send(connfd,"0",MAXLINE,0);
+			send(accp_sock,"0",MAXLINE,0);
 		}
 	   }
 
@@ -244,11 +211,9 @@ int main (int argc, char **argv)
  exit(0);
  }//end of for(;;)
  //close socket of the server
- close(connfd);
-}
-}
 
-int create_socket(int port)
+
+int tcp_listen(int port)
 {
 	int sd;
 	struct sockaddr_in servaddr;
