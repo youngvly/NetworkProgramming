@@ -16,22 +16,10 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip);
 char *EXIT_STRING="exit";
 void errquit(char *mesg) {perror(mesg); exit(1);}
 
-#ifdef WINDOWS
-    #include <direct.h>
-    #define GetCurrentDir _getcwd
-#else
-    #include <unistd.h>
-    #define GetCurrentDir getcwd
- #endif
-
-
-
-
 int main(int argc, char **argv){
- int sock,maxfdp1;
+ int sock;
  struct sockaddr_in servaddr;
  char bufmsg[MAXLINE], recvline[MAXLINE];
- fd_set read_fds;		//읽기를 감지할 fd_set 구조체
 
  //basic check of the arguments
  //additional checks can be inserted
@@ -42,24 +30,16 @@ int main(int argc, char **argv){
  //tcp connect함수 호출
   sock = tcp_connect(AF_INET,argv[1],atoi(argv[2]));
   if(sock == -1) errquit("tcp_connect fail");
-  maxfdp1 = sock+1;
-  puts("server Connected");
+  printf("server Connected\n");
 
-
- printf("FTP QUERY >>");
- FD_ZERO(&read_fds);	
-	while(1) {
-		FD_SET(0,&read_fds);
-		FD_SET(sock,&read_fds);
-		if(select(maxfdp1,&read_fds,NULL,NULL,NULL) <0) 
-			errquit("select fail");
-		if(FD_ISSET(0,&read_fds)) {	//사용자의 입력이 감지되면
-			if(fgets(bufmsg,MAXLINE, stdin)) {
-				send(sock, bufmsg, MAXLINE, 0);
-				sendQuery(bufmsg,sock,argv[1]);
-			}
-		}
+  while(1) {
+	printf("FTP QUERY >> ");	
+	if(fgets(bufmsg,MAXLINE, stdin)) {
+		send(sock, bufmsg, MAXLINE, 0);
+		sendQuery(bufmsg,sock,argv[1]);
 	}
+	
+  } 
 
  exit(0);
 }
@@ -89,7 +69,7 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
 		
 		//data print
 		recv(datasock, buf, MAXLINE,0);
-		if(strcmp("0",buf)==0)			//no more blocks of data
+		if(strcmp("0",buf)==0)			//end of data
 			break;
 		puts(buf);	
 	}
@@ -175,9 +155,9 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
 	}
    }
    else{
-	printf("Commend Error / Command : 'Get <filename>' 'put <filename>' 'ls (show directory list)' 'pwd(show directory location)\n");
+	printf("Commend Error / \nCommand : 'Get <filename>'/ 'put <filename>' /'ls (show directory list)' / myls(Show my directory list) / exit\n");
    }
-   printf("FTP QUERY >>");
+   printf("FTP QUERY >> ");
 }
 
 
