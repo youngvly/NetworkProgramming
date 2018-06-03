@@ -1,79 +1,255 @@
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
+#include <string.h>
+//#include <files.h>
 #include <unistd.h>
 #include <dirent.h> 
 
-#define MAXLINE 4096
-#define CLINUM 5
+#define MAXLINE 4096 /*max text line length*/
+#define LISTENQ 8 /*maximum number of client connections*/
 
-char* EXIT_STRING = "exit";
-int doQuery(int accp_sock, int listen_sock,int mainport);
-int tcp_listen(int port);
-int accept_conn(int sock);
+#define EXIT_STRING "exit"
+int create_socket(int);
+int accept_conn(int);
 void errquit(char *mesg) {perror(mesg); exit(1);}	
 
 
-int main(int argc, char *argv[]) {
-	struct sockaddr_in cliaddr, servaddr;
-	int listen_sock,accp_sock,addrlen=sizeof(cliaddr);
-	pid_t pid;
-	fd_set read_fds;
-	char bufmsg[MAXLINE];
+int main (int argc, char **argv)
+{
+ int listenfd, connfd, n;
+ pid_t childpid;
+ socklen_t clilen;
+ char buf[MAXLINE];
+ struct sockaddr_in cliaddr, servaddr;
 
-	if(argc !=2) {
+ if (argc !=2) {						//validating the input
 		printf(" Usage : %s port\n",argv[0]);
 		exit(0);
-	}
+ }
+ 
 
-	listen_sock = socket(AF_INET,SOCK_STREAM,0);
-	if(listen_sock ==-1){
+ //Create a socket for the soclet
+ //If sockfd<0 there was an error in the creation of the socket
+ if ((listenfd = socket (AF_INET, SOCK_STREAM, 0)) <0) {
 		perror("socket fail");
 		exit(1);
-	}
-	//servaddr 구조체의 내용 세팅
-	bzero((char*)&servaddr,sizeof(servaddr));
-	servaddr.sin_family=AF_INET;
-	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	servaddr.sin_port = htons(atoi(argv[1]));
-	if(bind(listen_sock,(struct sockaddr*)&servaddr,sizeof(servaddr))<0){
-		perror("bind fail");
-		exit(1);
-	}
-	//클라이언트로부터 연결요청을 기다림
-	listen(listen_sock,CLINUM);
-
-	puts("wait for client");
-	
-	while(1){
-	if((accp_sock=accept(listen_sock,(struct sockaddr*)&cliaddr,&addrlen))<0)
-		errquit("accept fail");
-
-	puts("Client connected");
-	if((pid = fork())==0)	//자식프로세스에서 클라언트 쿼리관리
-		doQuery(accp_sock,listen_sock,atoi(argv[1]));
-	else if(pid>0){		//부모프로세스에서 서버입력관리
-		if (fgets(bufmsg,MAXLINE,stdin)){
-			if(strstr(bufmsg,EXIT_STRING)!=NULL){	//server entered exit
-				puts("GoodBye");
-				close(listen_sock);		//close listen socket 
-				exit(0);
-			}
-		}
-		bufmsg[0] = '\0';
-	 }
-	
-	close(accp_sock);
-	}//end of while
- return 0;
  }
 
-//make listen socket 
-int tcp_listen(int port){
+
+ //preparation of the socket address
+ servaddr.sin_family = AF_INET;
+ servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+ servaddr.sin_port = htons(atoi(argv[1]));
+
+ //bind the socket
+ bind (listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+
+ //listen to the socket by creating a connection queue, then wait for clients
+ listen (listenfd, LISTENQ);
+
+	puts("wait for client");
+
+ for ( ; ; ) {
+
+  clilen = sizeof(cliaddr);
+  //accept a connection
+  connfd = accept (listenfd, (struct sockaddr *) &cliaddr, &clilen);
+
+	puts("Client connected");;
+
+  if ( (childpid = fork ()) == 0 ) {//if it’s 0, it’s child process
+
+	puts("Child process Created (for Client request)");
+
+  //close listening socket
+  close (listenfd);
+  int data_port=1024;						//for data connection
+  while ( (n = recv(connfd, buf, MAXLINE,0)) > 0)  {
+	   printf("String received : %s",buf);
+	   char *token,*dummy;
+	   dummy=buf;
+	   token=strtok(dummy," ");
+
+	   if (strcmp(EXIT_STRING,buf)==0)  {
+		printf("Client Exit\n");
+	   }
+
+	   if (strcmp("ls\n",buf)==0)  {
+		FILE *in;
+		char temp[MAXLINE],port[MAXLINE];
+		int datasock;
+		data_port=data_port+1;
+		if(data_port==atoi(argv[1])){
+			data_port=data_port+1;
+		}
+		sprintf(port,"%d",data_port);
+		datasock=create_socket(data_port);			//creating socket for data connection
+		send(connfd, port,MAXLINE,0);				//sending data connection port no. to client
+		datasock=accept_conn(datasock);	 			//accepting connection from client
+		if(!(in = popen("ls", "r"))){
+			perror("fileopen Error");
+		}
+		while(fgets(temp, sizeof(temp), in)!=NULL){
+			send(datasock,"1",MAXLINE,0);
+			send(datasock, temp, MAXLINE, 0);
+		
+		}
+		send(datasock,"0",MAXLINE,0);
+		pclose(in);
+
+		//cout<<"file closed\n";
+		/*int datasock;
+		data_port=data_port+1;
+		char temp[MAXLINE],port[MAXLINE];
+		data_port=data_port+1;
+		if(data_port==atoi(argv[1])){
+			data_port=data_port+1;
+		}
+		sprintf(port,"%d",data_port);
+		datasock=create_socket(data_port);			//creating socket for data connection
+		send(connfd, port,MAXLINE,0);				//sending data connection port no. to client
+		datasock=accept_conn(datasock);	 			//accepting connection from client
+
+		char *curr_dir = NULL; 
+		DIR *dp = NULL; 
+		struct dirent *dptr = NULL; 
+		unsigned int count = 0; 
+
+		// Get the value of environment variable PWD 
+		curr_dir = getenv("PWD"); 
+		if(NULL == curr_dir) 
+		{ 
+		printf("\n ERROR : Could not get the working directory\n"); 
+		return -1; 
+		} 
+
+		// Open the current directory 
+		dp = opendir((const char*)curr_dir); 
+		if(NULL == dp) 
+		{ 
+		printf("\n ERROR : Could not open the working directory\n"); 
+		return -1; 
+		} 
+
+		printf("\n"); 
+		// Go through and display all the names (files or folders) 
+		// Contained in the directory. 
+		for(count = 0; NULL != (dptr = readdir(dp)); count++) 
+		{ 
+			send(datasock,"1",MAXLINE,0);
+			sprintf(temp,"%s\n",dptr->d_name);
+			send(datasock, temp, MAXLINE, 0);
+		printf("%s  ",dptr->d_name); 
+		} 
+		send(datasock,"0",MAXLINE,0);
+		printf("\n %u", count); */
+	   }
+
+
+	   if (strcmp("put",token)==0)  {
+		char port[MAXLINE],buffer[MAXLINE],char_num_blks[MAXLINE],char_num_last_blk[MAXLINE],check[MAXLINE];
+		int datasock,num_blks,num_last_blk,i;
+		FILE *fp;
+		token=strtok(NULL," \n");
+		printf("(PUT) File name : %s\n",token);
+		data_port=data_port+1;
+		if(data_port==atoi(argv[1])){
+			data_port=data_port+1;
+		}
+		sprintf(port,"%d",data_port);
+		datasock=create_socket(data_port);				//creating socket for data connection
+		send(connfd, port,MAXLINE,0);					//sending data connection port to client
+		datasock=accept_conn(datasock);					//accepting connection
+		recv(connfd,check,MAXLINE,0);
+		if(strcmp("1",check)==0){
+			if((fp=fopen(token,"w"))==NULL)
+				printf("Create File Error\n");
+			else
+			{
+				recv(connfd, char_num_blks, MAXLINE,0);
+				num_blks=atoi(char_num_blks);
+				for(i= 0; i < num_blks; i++) { 
+					recv(datasock, buffer, MAXLINE,0);
+					fwrite(buffer,sizeof(char),MAXLINE,fp);
+					//cout<<buffer<<endl;
+				}
+				recv(connfd, char_num_last_blk, MAXLINE,0);
+				num_last_blk=atoi(char_num_last_blk);
+				if (num_last_blk > 0) { 
+					recv(datasock, buffer, MAXLINE,0);
+					fwrite(buffer,sizeof(char),num_last_blk,fp);
+					//cout<<buffer<<endl;
+				}
+				fclose(fp);
+				printf("Downloaded\n");
+			}
+		}
+	   }
+
+	   if (strcmp("get",token)==0)  {
+		char port[MAXLINE],buffer[MAXLINE],char_num_blks[MAXLINE],char_num_last_blk[MAXLINE];
+		int datasock,lSize,num_blks,num_last_blk,i;
+		FILE *fp;
+		token=strtok(NULL," \n");
+		printf("(GET) File name : %s\n",token);
+		data_port=data_port+1;
+		if(data_port==atoi(argv[1])){
+			data_port=data_port+1;
+		}
+		sprintf(port,"%d",data_port);
+		datasock=create_socket(data_port);				//creating socket for data connection
+		send(connfd, port,MAXLINE,0);					//sending port no. to client
+		datasock=accept_conn(datasock);					//accepting connnection by client
+		if ((fp=fopen(token,"r"))!=NULL)
+		{
+			//size of file
+			send(connfd,"1",MAXLINE,0);
+			fseek (fp , 0 , SEEK_END);
+			lSize = ftell (fp);
+			rewind (fp);
+			num_blks = lSize/MAXLINE;
+			num_last_blk = lSize%MAXLINE; 
+			sprintf(char_num_blks,"%d",num_blks);
+			send(connfd, char_num_blks, MAXLINE, 0);
+			//cout<<num_blks<<"	"<<num_last_blk<<endl;
+
+			for(i= 0; i < num_blks; i++) { 
+				fread (buffer,sizeof(char),MAXLINE,fp);
+				send(datasock, buffer, MAXLINE, 0);
+				//cout<<buffer<<"	"<<i<<endl;
+			}
+			sprintf(char_num_last_blk,"%d",num_last_blk);
+			send(connfd, char_num_last_blk, MAXLINE, 0);
+			if (num_last_blk > 0) { 
+				fread (buffer,sizeof(char),num_last_blk,fp);
+				send(datasock, buffer, MAXLINE, 0);
+				//cout<<buffer<<endl;
+			}
+			fclose(fp);
+			printf("File uploaded\n");
+		
+		}
+		else{
+			send(connfd,"0",MAXLINE,0);
+		}
+	   }
+
+	  }	//end of while
+ if (n < 0)
+	   printf("Can't recive Query from Client\n");
+
+ exit(0);
+ }//end of for(;;)
+ //close socket of the server
+ close(connfd);
+}
+}
+
+int create_socket(int port)
+{
 	int sd;
 	struct sockaddr_in servaddr;
 	
@@ -96,7 +272,6 @@ int tcp_listen(int port){
 	return sd;
 }
 
-
 int accept_conn(int sock)
 {
 	int dataconnfd;
@@ -111,158 +286,4 @@ int accept_conn(int sock)
 	}
 
 	return(dataconnfd);
-}
-
-
-//if pid==0 (Child Node)
-int doQuery(int accp_sock,int listen_sock,int mainport){
-	close (listen_sock);
-	puts("Child process Created (for Client request)");
-
-	int data_port=1024, isrecv;
-	char buf[MAXLINE];
-
-	while ( (isrecv = recv(accp_sock, buf, MAXLINE,0)) > 0)  {
-	   printf("String received : %s",buf);
-	   char *token,*dummy;	//문자열 토큰분리에 사용될 변수
-	   dummy=buf;
-	   token=strtok(dummy," ");
-
-	   //exit String
-	   if (strstr(buf,EXIT_STRING)!=NULL)  {
-		printf("Client Exit\n");
-	   }
-	   //show list string (ls)
-	   else if (strcmp("ls\n",buf)==0)  {
-	    	int datasock;
-		data_port=data_port+1;
-		char port[MAXLINE];
-		char *curr_dir = NULL; 
-		DIR *dp = NULL; 
-		struct dirent *dptr = NULL; 
-		if(data_port==mainport)		//포트번호 중복방지
-			data_port=data_port+1;
-		datasock=tcp_listen(data_port);		//creating socket for data connection
-		sprintf(port,"%d",data_port);
-
-		send(accp_sock, port,MAXLINE,0);	//sending data connection port to client
-		datasock=accept_conn(datasock);			
-
-		// Get the value of environment variable PWD 
-		curr_dir = getenv("PWD"); 
-		if(NULL == curr_dir) 
-			errquit("ERROR : Could not get the working directory");
-
-		// Open the current directory 
-		dp = opendir((const char*)curr_dir); 
-		if(NULL == dp) 
-			errquit("ERROR : Could not open the working directory");
-
-		while(NULL != (dptr = readdir(dp))) 
-		{ 
-			printf("%s  ",dptr->d_name); 
-			send(datasock,"1",MAXLINE,0);
-			send(datasock, dptr->d_name, MAXLINE, 0);
-		} 
-		send(datasock,"0",MAXLINE,0);
-	   }
-
-	   //put String ( put file to ftp) = getfunction in client
-	   else if (strstr(token,"put")!=NULL)  {
-		char port[MAXLINE],buffer[MAXLINE],
-		char_num_once[MAXLINE],char_num_last[MAXLINE],	//한번에 보내질 파일의 줄수, 나머지..
-		check[MAXLINE];
-		int datasock,num_blks,num_last_blk,i;
-		FILE *fp;
-		token=strtok(NULL," \n");
-		printf("(PUT) File name : %s\n",token);
-		data_port=data_port+1;
-		if(data_port==mainport){		//포트번호 중복방지
-			data_port=data_port+1;
-		}
-		datasock=tcp_listen(data_port);				//creating socket for data connection
-		sprintf(port,"%d",data_port);
-
-		send(accp_sock, port,MAXLINE,0);				//sending data connection port to client
-		datasock=accept_conn(datasock);					//accepting connection
-		recv(accp_sock,check,MAXLINE,0);
-		if(strcmp("1",check)==0){
-			if((fp=fopen(token,"w"))==NULL)				//create file with same name
-				printf("Create File Error\n");
-			else
-			{
-				//한번에 보낼 수 없는 
-				recv(accp_sock, char_num_once, MAXLINE,0);	//몇줄인지 확인
-				num_blks=atoi(char_num_once);
-				for(i= 0; i < num_blks; i++) { 			//파일에 write
-					recv(datasock, buffer, MAXLINE,0);
-					fwrite(buffer,sizeof(char),MAXLINE,fp);
-				}
-				//한번에 파일을 보낼 수 있는 길이라면
-				recv(accp_sock, char_num_last, MAXLINE,0);
-				num_last_blk=atoi(char_num_last);
-				if (num_last_blk > 0) { 
-					recv(datasock, buffer, MAXLINE,0);
-					fwrite(buffer,sizeof(char),num_last_blk,fp);
-				}
-				fclose(fp);
-				printf("Downloaded\n");
-			}
-		}//else : recv 0 = client can't find file
-	   }
-
-		//Client's put function
-	   else if (strstr(token,"get")!=NULL)  {
-		char port[MAXLINE],buffer[MAXLINE],
-			char_num_once[MAXLINE],char_num_last[MAXLINE];	//한번에 보내질 줄수 , 나머지 줄수
-		int datasock,lSize,num_blks,num_last_blk,i;
-		FILE *fp;
-		token=strtok(NULL," \n");	//get file name form token
-		printf("(GET) File name : %s\n",token);
-		data_port=data_port+1;
-		if(data_port==mainport){
-			data_port=data_port+1;
-		}
-		sprintf(port,"%d",data_port);
-		datasock=tcp_listen(data_port);		//creating socket for data connection
-		send(accp_sock, port,MAXLINE,0);		//sending port no. to client
-		datasock=accept_conn(datasock);			//accepting connnection by client
-		if ((fp=fopen(token,"r"))!=NULL)
-		{
-			//size of file
-			send(accp_sock,"1",MAXLINE,0);
-			fseek (fp , 0 , SEEK_END);
-			lSize = ftell (fp);
-			rewind (fp);
-		
-			num_blks = lSize/MAXLINE;
-			num_last_blk = lSize%MAXLINE; 
-			//send file at once
-			sprintf(char_num_once,"%d",num_blks);
-			send(accp_sock, char_num_once, MAXLINE, 0);
-			for(i= 0; i < num_blks; i++) { 
-				fread (buffer,sizeof(char),MAXLINE,fp);
-				send(datasock, buffer, MAXLINE, 0);
-			}
-			//send rest of file
-			sprintf(char_num_last,"%d",num_last_blk);
-			send(accp_sock, char_num_last, MAXLINE, 0);
-			if (num_last_blk > 0) { 
-				fread (buffer,sizeof(char),num_last_blk,fp);
-				send(datasock, buffer, MAXLINE, 0);
-			}
-			fclose(fp);
-			printf("File uploaded\n");
-		}
-		else{
-			send(accp_sock,"0",MAXLINE,0);
-		}
-	   }	//end of get comment 
-
-	  }//end of while
-
-	  if (isrecv < 0)
-	   printf("Can't recive Query from Client\n");
-	  puts("Child Process END");
-	  exit(0);
 }

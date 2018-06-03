@@ -80,17 +80,17 @@ void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
 	puts("----------------------------------------");
    }
    else if (strstr(bufmsg,"ls")!=NULL)  {
-   	char buf[MAXLINE],check[MAXLINE]="1",port[MAXLINE];
+   	char buf[MAXLINE]="1",check[MAXLINE]="1",port[MAXLINE];
 	int datasock;
 	recv(sock, port, MAXLINE,0);				//reciening data connection port
 	datasock=tcp_connect (AF_INET,servip,atoi(port));
-	while(strstr("1",check)!=NULL){ 			//to indicate that more blocks are coming
-		recv(datasock,check,MAXLINE,0);
-		if(strcmp("0",check)==0)			//no more blocks of data
-		break;
+	puts("\n-------------Server File List-----------");	
+	while(1){ 			//to indicate that more blocks are coming		
+		
 		//data print
 		recv(datasock, buf, MAXLINE,0);
-		puts("\n-------------Server File List-----------");
+		if(strcmp("0",buf)==0)			//no more blocks of data
+			break;
 		puts(buf);	
 	}
 	puts("----------------------------------------");
