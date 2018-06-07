@@ -17,22 +17,22 @@ char *EXIT_STRING="exit";
 void errquit(char *mesg) {perror(mesg); exit(1);}
 
 int main(int argc, char **argv){
- int sock;
- struct sockaddr_in servaddr;
- char bufmsg[MAXLINE], recvline[MAXLINE];
- fd_set read_fds;
+	int sock;
+	struct sockaddr_in servaddr;
+	char bufmsg[MAXLINE], recvline[MAXLINE];
+	fd_set read_fds;
 
- //basic check of the arguments
- //additional checks can be inserted
- if(argc !=3) {
-	printf("Usage : %s server_ip port \n",argv[0]);
-	exit(0);
- }
- //tcp connect함수 호출
-  sock = tcp_connect(AF_INET,argv[1],atoi(argv[2]));
-  if(sock == -1) errquit("tcp_connect fail");
-  int maxfdp1 = sock+1;
-  printf("server Connected\n");
+	//basic check of the arguments
+	//additional checks can be inserted
+	if(argc !=3) {
+		printf("Usage : %s server_ip port \n",argv[0]);
+		exit(0);
+	}
+	//tcp connect함수 호출
+	sock = tcp_connect(AF_INET,argv[1],atoi(argv[2]));
+	if(sock == -1) errquit("tcp_connect fail");
+	int maxfdp1 = sock+1;
+	printf("server Connected\n");
 
 	FD_ZERO(&read_fds);	
 	while(1) {
@@ -41,14 +41,6 @@ int main(int argc, char **argv){
 		FD_SET(sock,&read_fds);
 		if(select(maxfdp1,&read_fds,NULL,NULL,NULL) <0) 
 			errquit("select fail");
-		/*if(FD_ISSET(s,&read_fds)) {	//서버와연결된 소켓에서 입력이 오면
-			int nbyte;
-			//메시지를 받고 출력
-			if((nbyte=recv(s,bufmsg,MAXLINE,0)) >0) {
-				bufmsg[nbyte] =0;
-				printf("%s \n",bufmsg);
-			}
-		}*/
 		if(FD_ISSET(0,&read_fds)) {	//사용자의 입력이 감지되면
 			if(fgets(bufmsg,MAXLINE, stdin)) {
 				send(sock, bufmsg, MAXLINE, 0);
@@ -57,121 +49,122 @@ int main(int argc, char **argv){
 		}
 	}
 
- exit(0);
+	exit(0);
 }
 
 void sendQuery(char bufmsg[MAXLINE],int sock,char* servip){
 	
-  char *token,*dummy;
-  dummy=bufmsg;
-  token=strtok(dummy," ");
+	char *token,*dummy;
+	dummy=bufmsg;
+	token=strtok(dummy," ");
    
-   if (strstr(bufmsg,EXIT_STRING)!=NULL)  {
-   	//close(sockfd);
-	exit(0);
-   }
-   else if (strstr(bufmsg,"myls")!=NULL){
-	puts("\n------------Client File List-----------");
-	system("ls");
-	puts("----------------------------------------");
-   }
-   else if (strstr(bufmsg,"ls")!=NULL)  {
-   	char buf[MAXLINE]="1",check[MAXLINE]="1",port[MAXLINE];
-	int datasock;
-	recv(sock, port, MAXLINE,0);				//reciening data connection port
-	datasock=tcp_connect (AF_INET,servip,atoi(port));
-	puts("\n-------------Server File List-----------");	
-	while(1){ 			//to indicate that more blocks are coming		
-		//data print
-		recv(datasock, buf, MAXLINE,0);
-		if(strcmp("0",buf)==0)			//end of data
-			break;
-		puts(buf);	
+	if (strstr(bufmsg,EXIT_STRING)!=NULL)  {
+		//close(sockfd);
+		exit(0);
 	}
-	puts("----------------------------------------");
-   }
-   //PUT Comment = Server's GET Function
-   else if (strstr(token,"put")!=NULL)  {
-   	char port[MAXLINE], buffer[MAXLINE],char_num_blks[MAXLINE],char_num_last_blk[MAXLINE];
-	int datasock,lSize,num_blks,num_last_blk,i;
-	FILE *fp;
-	recv(sock, port, MAXLINE,0);				//receiving the data port
+	else if (strstr(bufmsg,"myls")!=NULL){
+		puts("\n------------Client File List-----------");
+		system("ls");
+		puts("----------------------------------------");
+	}
+	else if (strstr(bufmsg,"ls")!=NULL)  {
+		char buf[MAXLINE]="T",check[MAXLINE]="T",port[MAXLINE];
+		int datasock;
+		recv(sock, port, MAXLINE,0);				//reciening data connection port
+		datasock=tcp_connect (AF_INET,servip,atoi(port));
+		puts("\n-------------Server File List-----------");	
+		while(1){ 			//to indicate that more blocks are coming		
+			//data print
+			recv(datasock, buf, MAXLINE,0);
+			if(strcmp("F",buf)==0)			//end of data
+				break;
+			puts(buf);	
+		}
+		puts("----------------------------------------");
+	}
+	//PUT Comment = Server's GET Function
+	else if (strstr(token,"put")!=NULL)  {
+		char port[MAXLINE], buffer[MAXLINE],lineNum_c[MAXLINE],lineNum2_c[MAXLINE];
+		int datasock,lSize,lineNum,lineNum2,i;
+		FILE *fp;
+		recv(sock, port, MAXLINE,0);				//receiving the data port
 	
-	datasock=tcp_connect (AF_INET,servip,atoi(port));
-	token=strtok(NULL," \n");
-	if ((fp=fopen(token,"r"))!=NULL)
-	{
-		
-		send(sock,"1",MAXLINE,0);
-		//size of file
-		fseek (fp , 0 , SEEK_END);
-		lSize = ftell (fp);
-		rewind (fp);			//move pointer to start of file
-		num_blks = lSize/MAXLINE;	//can write once
-		num_last_blk = lSize%MAXLINE; 	//write after once
-		
-		//send file (can send at once)
-		sprintf(char_num_blks,"%d",num_blks);
-		send(sock, char_num_blks, MAXLINE, 0);	//send line num
-		for(i= 0; i < num_blks; i++) { 
-			fread (buffer,sizeof(char),MAXLINE,fp);
-			send(datasock, buffer, MAXLINE, 0);
-		}
-		//send rest of file
-		sprintf(char_num_last_blk,"%d",num_last_blk);
-		send(sock, char_num_last_blk, MAXLINE, 0);
-		if (num_last_blk > 0) { 
-			fread (buffer,sizeof(char),num_last_blk,fp);
-			send(datasock, buffer, MAXLINE, 0);
-		}
-		fclose(fp);
-		printf("File uploaded\n");
-	}
-	else{
-		send(sock,"0",MAXLINE,0);
-		printf("%s File open Error",token);
-		puts("Usage : put <filename>");
-	}
-   }
-   
-   //GET Comment = Server's Put function
-   else if (strstr(token,"get")!=NULL)  {
-   	char port[MAXLINE], buffer[MAXLINE],char_num_blks[MAXLINE],char_num_last_blk[MAXLINE],message[MAXLINE];
-	int datasock,lSize,num_blks,num_last_blk,i;
-	FILE *fp;
-	recv(sock, port, MAXLINE,0);
-	datasock=tcp_connect (AF_INET,servip,atoi(port));
-	token=strtok(NULL," \n");
-	recv(sock,message,MAXLINE,0);
-	if(strcmp("1",message)==0){
-		if((fp=fopen(token,"w"))==NULL) printf("Create File Error\n");
-		else
+		datasock=tcp_connect (AF_INET,servip,atoi(port));
+		token=strtok(NULL," \n");
+		if ((fp=fopen(token,"r"))!=NULL)
 		{
-			recv(sock, char_num_blks, MAXLINE,0);
-			num_blks=atoi(char_num_blks);
-			for(i= 0; i < num_blks; i++) { 
-				recv(datasock, buffer, MAXLINE,0);
-				fwrite(buffer,sizeof(char),MAXLINE,fp);
+		
+			send(accp_sock, "T", MAXLINE, 0);
+			fseek(fp, 0, SEEK_END);				//go to file's last point
+			lSize = ftell(fp);						//tell point location = length of file
+			rewind(fp);							//go to file's first point
+			lineNum = lSize / MAXLINE;				//calculate line number
+			lineNum2 = lSize % MAXLINE;				//if it's longer than MAXLINE , last linenumber ->lineNum2
+			sprintf(lineNum_c, "%d", lineNum);
+			send(accp_sock, lineNum_c, MAXLINE, 0);		//send line number (= time of send,recv)
+
+			for(i= 0; i < lineNum; i++) { 
+				fread (buffer,sizeof(char),MAXLINE,fp);
+				send(datasock, buffer, MAXLINE, 0);
 			}
-			recv(sock, char_num_last_blk, MAXLINE,0);
-			num_last_blk=atoi(char_num_last_blk);
-			if (num_last_blk > 0) { 
-				recv(datasock, buffer, MAXLINE,0);
-				fwrite(buffer,sizeof(char),num_last_blk,fp);
+			//send rest of file
+			sprintf(lineNum2_c,"%d",lineNum2);
+			send(sock, lineNum2_c, MAXLINE, 0);
+			if (lineNum2 > 0) { 
+				fread (buffer,sizeof(char),lineNum2,fp);
+				send(datasock, buffer, MAXLINE, 0);
 			}
 			fclose(fp);
-			puts("Download Done.");
+			printf("File uploaded\n");
+		}
+		else{
+			send(sock,"F",MAXLINE,0);
+			printf("%s File open Error",token);
+			puts("Usage : put <filename>");
 		}
 	}
+   
+	//GET Comment = Server's Put function
+	else if (strstr(token,"get")!=NULL)  {
+		char port[MAXLINE], buffer[MAXLINE],lineNum_c[MAXLINE],lineNum2_c[MAXLINE],check[MAXLINE];
+		int datasock,lSize,lineNum,lineNum2,i;
+		FILE *fp;
+		recv(sock, port, MAXLINE,0);
+		datasock=tcp_connect (AF_INET,servip,atoi(port));
+		token=strtok(NULL," \n");
+		recv(sock,check,MAXLINE,0);
+		if (strcmp("T", check) == 0) {
+			if ((fp = fopen(token, "w")) == NULL)
+				printf("Create File Error\n");
+			else
+			{
+				recv(accp_sock, lineNum_c, MAXLINE, 0);		//get linenumber of file
+				lineNum = atoi(lineNum_c);
+				//recieve each line's data and write on file
+				for (i = 0; i < lineNum; i++) {
+					recv(datasock, buffer, MAXLINE, 0);
+					fwrite(buffer, sizeof(char), MAXLINE, fp);
+				}
+				//is file is longer than MAXLINE
+				recv(accp_sock, lineNum2_c, MAXLINE, 0);
+				lineNum2 = atoi(lineNum2_c);
+				if (lineNum2 > 0) {
+					recv(datasock, buffer, MAXLINE, 0);
+					fwrite(buffer, sizeof(char), lineNum2, fp);
+				}
+				puts("Download Success");
+				fclose(fp);
+			}
+		}
+		else{
+			printf("File open Error\n");
+			printf("Usage : put <filenames>\n");		
+		}
+	}//end of getfunc
 	else{
-		printf("File open Error\n");
-		printf("Usage : put <filenames>\n");		
+		printf("Commend Error / \nCommand : 'Get <filename>'/ 'put <filename>' /'ls (show directory list)' / myls(Show my directory list) / exit\n");
 	}
-   }
-   else{
-	printf("Commend Error / \nCommand : 'Get <filename>'/ 'put <filename>' /'ls (show directory list)' / myls(Show my directory list) / exit\n");
-   }
-   printf("FTP QUERY >> ");
+	printf("FTP QUERY >> ");
 }
 
 int tcp_connect(int af,char*servip,unsigned short port) {

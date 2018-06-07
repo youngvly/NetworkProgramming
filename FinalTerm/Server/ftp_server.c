@@ -7,205 +7,198 @@
 #include <unistd.h>
 #include <dirent.h> 
 
-#define MAXLINE 4096 /*max text line length*/
-#define MAXCLI 5
+#define MAXLINE 4096	//max text length
+#define MAXCLI 5		//max client 
+#define EXIT_STRING "exit"	
 
-#define EXIT_STRING "exit"
-int tcp_listen(int);
-int accept_conn(int);
+int tcp_listen(int);	//listen func
+int acpt(int);			//accept func
 void errquit(char *mesg) {perror(mesg); exit(1);}	
 void doQuery(int accp_sock,int listen_sock,char** argv);
 
 int main (int argc, char **argv)
 {
- int listen_sock, accp_sock, n;
- pid_t pid;
- socklen_t clilen;
- char buf[MAXLINE],bufmsg[MAXLINE];
- struct sockaddr_in cliaddr, servaddr;
+	 int listen_sock, accp_sock, n;
+	 pid_t pid;
+	 socklen_t addrlen = sizeof(cliaddr);
+	 char buf[MAXLINE],bufmsg[MAXLINE];
+	 struct sockaddr_in cliaddr, servaddr;
 
- if (argc !=2) {						//validating the input
-		printf(" Usage : %s port\n",argv[0]);
-		exit(0);
- }
- 
-
- //Create a socket for the soclet
- //If sockfd<0 there was an error in the creation of the socket
- if ((listen_sock = socket (AF_INET, SOCK_STREAM, 0)) <0) {
-		perror("socket fail");
-		exit(1);
- }
-
-
- //preparation of the socket address
- servaddr.sin_family = AF_INET;
- servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
- servaddr.sin_port = htons(atoi(argv[1]));
-
- //bind the socket
- bind (listen_sock, (struct sockaddr *) &servaddr, sizeof(servaddr));
-
- //listen to the socket by creating a connection queue, then wait for clients
- listen (listen_sock, MAXCLI);
+	 //Server open listen socket for accept client
+	 if (argc !=2) {
+			printf(" Usage : %s port\n",argv[0]);
+			exit(0);
+		}
+	 if ((listen_sock = socket (AF_INET, SOCK_STREAM, 0)) <0) {
+			perror("socket fail");
+			exit(1);
+		}
+	 servaddr.sin_family = AF_INET;
+	 servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	 servaddr.sin_port = htons(atoi(argv[1]));
+	 bind (listen_sock, (struct sockaddr *) &servaddr, sizeof(servaddr));
+	 listen (listen_sock, MAXCLI);
 
 	puts("wait for client");
 
-while(1) {
+	while(1) {
+		//accept a connection
+		accp_sock = accept (listen_sock, (struct sockaddr *) &cliaddr, &addrlen);
 
-  clilen = sizeof(cliaddr);
-  //accept a connection
-  accp_sock = accept (listen_sock, (struct sockaddr *) &cliaddr, &clilen);
+		puts("Client connected");
 
-	puts("Client connected");;
-  if((pid = fork ()) >0) {
-	if (fgets(bufmsg,MAXLINE,stdin)){
-			if(strstr(bufmsg,EXIT_STRING)!=NULL){	//server entered exit
-				puts("GoodBye");
-				close(listen_sock);		//close listen socket 
-				exit(0);
+		//if its parents process > server exit command
+		if((pid = fork ()) >0) {
+			if (fgets(bufmsg,MAXLINE,stdin)){
+				if(strstr(bufmsg,EXIT_STRING)!=NULL){	//server entered exit
+					puts("GoodBye");
+					close(listen_sock);		//close listen socket 
+					exit(0);
+				}
 			}
+			bufmsg[0] = '\0';
 		}
-		bufmsg[0] = '\0';
-  }
 
-  if (pid  == 0 ) {//if it’s 0, it’s child process
-	doQuery(accp_sock,listen_sock,argv);
-  }
-}//end of while
- close(accp_sock);
+		//if it’s 0, it’s child process > client command
+		if (pid  == 0 ) {	
+			doQuery(accp_sock,listen_sock,argv);
+		}
+	}//end of while
+	 close(accp_sock);
 }
+
 
 void doQuery(int accp_sock,int listen_sock,char** argv){
 	puts("Child process Created (for Client request)");
- char buf[MAXLINE];
-  //close listening socket
-  close (listen_sock);
-  int data_port=1024,n;						//for data connection
-  while ( (n = recv(accp_sock, buf, MAXLINE,0)) > 0)  {
+	char buf[MAXLINE];
+	//close (listen_sock);
+
+	int dataport=1025,isrecv;				//data port
+	while ( (isrecv = recv(accp_sock, buf, MAXLINE,0)) > 0)  {
 	   printf("String received : %s",buf);
-	   char *token,*dummy;
-	   dummy=buf;
-	   token=strtok(dummy," ");
+	   char *token,*originaltext;			//for strt-token			
+	   originaltext=buf;
+	   token=strtok(originaltext," ");		//extract command only
 
+	   //If its exit
 	   if (strcmp(EXIT_STRING,buf)==0)  {
-		printf("Client Exit\n");
+			printf("Client Exit\n");
 	   }
-
+	   //if its ls > show server directory ist
 	   if (strcmp("ls\n",buf)==0)  {
-		FILE *in;
-		char temp[MAXLINE],port[MAXLINE];
-		int datasock;
-		data_port=data_port+1;
-		if(data_port==atoi(argv[1])){
-			data_port=data_port+1;
-		}
-		sprintf(port,"%d",data_port);
-		datasock=tcp_listen(data_port);			//creating socket for data connection
-		send(accp_sock, port,MAXLINE,0);				//sending data connection port no. to client
-		datasock=accept_conn(datasock);	 			//accepting connection from client
-		if(!(in = popen("ls", "r"))){
-			perror("fileopen Error");
-		}
-		while(fgets(temp, sizeof(temp), in)!=NULL){
-			//send(datasock,"1",MAXLINE,0);
-			send(datasock, temp, MAXLINE, 0);
-		}
-		send(datasock,"0",MAXLINE,0);
-		pclose(in);
+			FILE *in;
+			char temp[MAXLINE],port[MAXLINE];
+			int datasock;
+
+			dataport = dataport + 1;			//for avoid portnumber crash
+			if(dataport==atoi(argv[1])){		//if it's same with mainport
+				dataport=dataport+1;
+			}
+
+			sprintf(dataport_s,"%d",dataport);
+			datasock=tcp_listen(dataport);				//creating socket for data connection
+			send(accp_sock, dataport_s,MAXLINE,0);		//sending data connection port no. to client
+			datasock=acpt(datasock);	 				//accepting connection from client
+			if(!(in = popen("ls", "r"))){
+				perror("fileopen Error");
+			}
+			while(fgets(temp, sizeof(temp), in)!=NULL){
+				//send(datasock,"T",MAXLINE,0);
+				send(datasock, temp, MAXLINE, 0);
+			}
+			send(datasock,"F",MAXLINE,0);
+			pclose(in);
 	   }
 
-
+	   //put func
 	   if (strcmp("put",token)==0)  {
-		char port[MAXLINE],buffer[MAXLINE],char_num_blks[MAXLINE],char_num_last_blk[MAXLINE],check[MAXLINE];
-		int datasock,num_blks,num_last_blk,i;
-		FILE *fp;
-		token=strtok(NULL," \n");
-		printf("(PUT) File name : %s\n",token);
-		data_port=data_port+1;
-		if(data_port==atoi(argv[1])){
-			data_port=data_port+1;
-		}
-		sprintf(port,"%d",data_port);
-		datasock=tcp_listen(data_port);		//creating socket for data connection
-		send(accp_sock, port,MAXLINE,0);	//sending data connection port to client
-		datasock=accept_conn(datasock);		//accepting connection
-		recv(accp_sock,check,MAXLINE,0);
-		if(strcmp("1",check)==0){
-			if((fp=fopen(token,"w"))==NULL)
-				printf("Create File Error\n");
-			else
-			{
-				recv(accp_sock, char_num_blks, MAXLINE,0);
-				num_blks=atoi(char_num_blks);
-				for(i= 0; i < num_blks; i++) { 
-					recv(datasock, buffer, MAXLINE,0);
-					fwrite(buffer,sizeof(char),MAXLINE,fp);
-					//cout<<buffer<<endl;
+			char port[MAXLINE],buffer[MAXLINE],lineNum_c[MAXLINE],lineNum2_c[MAXLINE],check[MAXLINE];
+			int datasock,lineNum,lineNum2,i;
+			FILE *fp;
+			token=strtok(NULL," \n");
+			printf("(PUT) File name : %s\n",token);
+			dataport=dataport+1;
+			if(dataport==atoi(argv[1])){
+				dataport=dataport+1;
+			}
+			sprintf(port,"%d",dataport);
+			datasock=tcp_listen(dataport);		
+			send(accp_sock, port,MAXLINE,0);	//send dataport to client
+			datasock=acpt(datasock);		
+
+			recv(accp_sock,check,MAXLINE,0);	//check if its connected
+			if(strcmp("T",check)==0){
+				if((fp=fopen(token,"w"))==NULL)
+					printf("Create File Error\n");
+				else
+				{
+					recv(accp_sock, lineNum_c, MAXLINE,0);		//get linenumber of file
+					lineNum=atoi(lineNum_c);
+					//recieve each line's data and write on file
+					for(i= 0; i < lineNum; i++) { 
+						recv(datasock, buffer, MAXLINE,0);
+						fwrite(buffer,sizeof(char),MAXLINE,fp);
+					}
+					//is file is longer than MAXLINE
+					recv(accp_sock, lineNum2_c, MAXLINE,0);
+					lineNum2=atoi(lineNum2_c);
+					if (lineNum2 > 0) { 
+						recv(datasock, buffer, MAXLINE,0);
+						fwrite(buffer,sizeof(char),lineNum2,fp);
+					}
+					puts("Download Success");
+					fclose(fp);
 				}
-				recv(accp_sock, char_num_last_blk, MAXLINE,0);
-				num_last_blk=atoi(char_num_last_blk);
-				if (num_last_blk > 0) { 
-					recv(datasock, buffer, MAXLINE,0);
-					fwrite(buffer,sizeof(char),num_last_blk,fp);
-					//cout<<buffer<<endl;
+			}
+	   }
+
+	   //get func
+	   if (strcmp("get",token)==0)  {
+			char port[MAXLINE],buffer[MAXLINE],lineNum_c[MAXLINE],lineNum2_c[MAXLINE];
+			int datasock,lSize,lineNum,lineNum2,i;
+			FILE *fp;
+			token=strtok(NULL," \n");
+			printf("(GET) File name : %s\n",token);
+			dataport=dataport+1;
+			if(dataport==atoi(argv[1])){
+				dataport=dataport+1;
+			}
+			sprintf(port,"%d",dataport);
+			datasock=tcp_listen(dataport);				//creating socket for data connection
+			send(accp_sock, port,MAXLINE,0);					//sending port no. to client
+			datasock=acpt(datasock);					//accepting connnection by client
+			if ((fp=fopen(token,"r"))!=NULL)
+			{
+				send(accp_sock,"T",MAXLINE,0);
+				fseek (fp , 0 , SEEK_END);				//go to file's last point
+				lSize = ftell (fp);						//tell point location = length of file
+				rewind (fp);							//go to file's first point
+				lineNum = lSize/MAXLINE;				//calculate line number
+				lineNum2 = lSize%MAXLINE;				//if it's longer than MAXLINE , last linenumber ->lineNum2
+				sprintf(lineNum_c,"%d",lineNum);	
+				send(accp_sock, lineNum_c, MAXLINE, 0);		//send line number (= time of send,recv)
+
+				for(i= 0; i < lineNum; i++) { 
+					fread (buffer,sizeof(char),MAXLINE,fp);
+					send(datasock, buffer, MAXLINE, 0);
+				}
+				sprintf(lineNum2_c,"%d",lineNum2);
+				send(accp_sock, lineNum2_c, MAXLINE, 0);
+				if (lineNum2 > 0) { 
+					fread (buffer,sizeof(char),lineNum2,fp);
+					send(datasock, buffer, MAXLINE, 0);
 				}
 				fclose(fp);
-				printf("Downloaded\n");
-			}
-		}
-	   }
-
-	   if (strcmp("get",token)==0)  {
-		char port[MAXLINE],buffer[MAXLINE],char_num_blks[MAXLINE],char_num_last_blk[MAXLINE];
-		int datasock,lSize,num_blks,num_last_blk,i;
-		FILE *fp;
-		token=strtok(NULL," \n");
-		printf("(GET) File name : %s\n",token);
-		data_port=data_port+1;
-		if(data_port==atoi(argv[1])){
-			data_port=data_port+1;
-		}
-		sprintf(port,"%d",data_port);
-		datasock=tcp_listen(data_port);				//creating socket for data connection
-		send(accp_sock, port,MAXLINE,0);					//sending port no. to client
-		datasock=accept_conn(datasock);					//accepting connnection by client
-		if ((fp=fopen(token,"r"))!=NULL)
-		{
-			//size of file
-			send(accp_sock,"1",MAXLINE,0);
-			fseek (fp , 0 , SEEK_END);
-			lSize = ftell (fp);
-			rewind (fp);
-			num_blks = lSize/MAXLINE;
-			num_last_blk = lSize%MAXLINE; 
-			sprintf(char_num_blks,"%d",num_blks);
-			send(accp_sock, char_num_blks, MAXLINE, 0);
-			//cout<<num_blks<<"	"<<num_last_blk<<endl;
-
-			for(i= 0; i < num_blks; i++) { 
-				fread (buffer,sizeof(char),MAXLINE,fp);
-				send(datasock, buffer, MAXLINE, 0);
-				//cout<<buffer<<"	"<<i<<endl;
-			}
-			sprintf(char_num_last_blk,"%d",num_last_blk);
-			send(accp_sock, char_num_last_blk, MAXLINE, 0);
-			if (num_last_blk > 0) { 
-				fread (buffer,sizeof(char),num_last_blk,fp);
-				send(datasock, buffer, MAXLINE, 0);
-				//cout<<buffer<<endl;
-			}
-			fclose(fp);
-			printf("File uploaded\n");
+				printf("File uploaded\n");
 		
-		}
-		else{
-			send(accp_sock,"0",MAXLINE,0);
-		}
+			}
+			else{
+				send(accp_sock,"F",MAXLINE,0);
+			}
 	   }
 
 	  }	//end of while
- if (n < 0)
+ if (isrecv < 0)
 	   printf("Can't recive Query from Client\n");
 
  exit(0);
@@ -237,15 +230,15 @@ int tcp_listen(int port)
 	return sd;
 }
 
-int accept_conn(int sock)
+int acpt(int sock)
 {
 	int dataconnfd;
-	socklen_t dataclilen;
+	socklen_t dataaddrlen;
 	struct sockaddr_in datacliaddr;
 
-	dataclilen = sizeof(datacliaddr);
+	dataaddrlen = sizeof(datacliaddr);
 	  //accept a connection
-	if ((dataconnfd = accept (sock, (struct sockaddr *) &datacliaddr, &dataclilen)) <0) {
+	if ((dataconnfd = accept (sock, (struct sockaddr *) &datacliaddr, &dataaddrlen)) <0) {
 		printf("Accept data Socket Fail\n");
 		exit(2);
 	}
