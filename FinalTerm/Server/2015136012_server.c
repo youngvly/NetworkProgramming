@@ -149,31 +149,30 @@ void doQuery(int accp_sock,int listen_sock,char** argv){
 			printf("(GET) File name : %s\n",token);
 			datasock=sendDataport(accp_sock,atoi(argv[1]));
 			if ((fp=fopen(token,"r"))!=NULL)
-		{
+			{
+				send(accp_sock,"T",2,0);
+				fseek (fp , 0 , SEEK_END);			//go to file's last point
+				lSize = ftell(fp);				//tell point location = length of file
+				rewind(fp);					//go to file's first point
+				lineNum = lSize / MAXLINE;			//calculate line number
+				lineNum2 = lSize % MAXLINE;				//if it's longer than MAXLINE , last linenumber ->lineNum2
+				sprintf(lineNum_c,"%d",lineNum);	
+				send(accp_sock, lineNum_c, MAXLINE, 0);		//send line number (= time of send,recv)
+				for(i= 0; i < lineNum; i++) { 
+					fread (buffer,sizeof(char),MAXLINE,fp);
+					send(datasock, buffer, MAXLINE, 0);
+					puts(buffer);
+				}
+				sprintf(lineNum2_c,"%d",lineNum2);
+				send(accp_sock, lineNum2_c, MAXLINE, 0);
+				if (lineNum2 > 0) { 
+					fread (buffer,sizeof(char),lineNum2,fp);
+					send(datasock, buffer, MAXLINE, 0);
+				}
+				fclose(fp);
+				printf("File uploaded\n");
 		
-			send(accp_sock, "T", MAXLINE, 0);
-			fseek(fp, 0, SEEK_END);				//go to file's last point
-			lSize = ftell(fp);						//tell point location = length of file
-			rewind(fp);							//go to file's first point
-			lineNum = lSize / MAXLINE;				//calculate line number
-			lineNum2 = lSize % MAXLINE;				//if it's longer than MAXLINE , last linenumber ->lineNum2
-			sprintf(lineNum_c, "%d", lineNum);
-			send(accp_sock, lineNum_c, MAXLINE, 0);		//send line number (= time of send,recv)
-
-			for(i= 0; i < lineNum; i++) { 
-				fread (buffer,sizeof(char),MAXLINE,fp);
-				send(datasock, buffer, MAXLINE, 0);
 			}
-			//send rest of file
-			sprintf(lineNum2_c,"%d",lineNum2);
-			send(accp_sock, lineNum2_c, MAXLINE, 0);
-			if (lineNum2 > 0) { 
-				fread (buffer,sizeof(char),lineNum2,fp);
-				send(datasock, buffer, MAXLINE, 0);
-			}
-			fclose(fp);
-			printf("File uploaded\n");
-		}
 			else{
 				send(accp_sock,"F",MAXLINE,0);
 			}
